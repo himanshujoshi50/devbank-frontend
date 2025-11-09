@@ -1,23 +1,26 @@
 version: 0.2
+
+env:
+  variables:
+    IMAGE_NAME: "jhimanshu50/devbank-frontend"
+    IMAGE_TAG: "latest"
+  parameter-store:
+    DOCKERHUB_USERNAME: "/devbank/dockerhub/username"
+    DOCKERHUB_TOKEN: "/devbank/dockerhub/token"
+
 phases:
   pre_build:
     commands:
-      - echo Logging in to Amazon ECR...
-      - aws --version
-      - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-      - REGION=us-east-1
-      - REPO=devbank-frontend
-      - IMAGE_TAG=$CODEBUILD_RESOLVED_SOURCE_VERSION
-      - aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
+      - echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+      - docker buildx create --use --name multi || docker buildx use multi
   build:
     commands:
-      - echo Build started on `date`
-      - docker build -t $REPO .
-      - docker tag $REPO:latest $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$REPO:$IMAGE_TAG
+      - docker buildx build --platform linux/amd64 -t "$IMAGE_NAME:$IMAGE_TAG" --push .
   post_build:
     commands:
-      - docker push $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$REPO:$IMAGE_TAG
-      - printf '[{"name":"frontend","imageUri":"%s.dkr.ecr.%s.amazonaws.com/%s:%s"}]' $ACCOUNT_ID $REGION $REPO $IMAGE_TAG > imagedefinitions.json
+      # IMPORTANT: container name must match your task definition: "frontend"
+      - printf '[{"name":"frontend","imageUri":"%s:%s"}]' "$IMAGE_NAME" "$IMAGE_TAG" > imagedefinitions.json
+
 artifacts:
   files:
     - imagedefinitions.json
